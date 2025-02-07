@@ -1,0 +1,12 @@
+
+Results for file: /pscratch/sd/t/titus/MiniUchuu/mcmc_results/newdata_sigboosts_fullrun_mh_no_h1z_in_bmodel_only_rs_old_prior_setup_changed_bcov_phys_units_all_scale_final_final_Fig9_mcmc_results_l3_z0.h5
+$\log_{10}M$: 68% CI: 14.2913 [-0.0222, +0.0231]
+
+Results for file: /pscratch/sd/t/titus/MiniUchuu/mcmc_results/newdata_sigboosts_fullrun_mh_no_h1z_in_bmodel_only_rs_old_prior_setup_changed_bcov_phys_units_all_scale_final_final_Fig9_mcmc_results_l4_z0.h5
+$\log_{10}M$: 68% CI: 14.4528 [-0.0255, +0.0212]
+
+Results for file: /pscratch/sd/t/titus/MiniUchuu/mcmc_results/newdata_sigboosts_fullrun_mh_no_h1z_in_bmodel_only_rs_old_prior_setup_changed_bcov_phys_units_all_scale_final_final_Fig9_mcmc_results_l5_z0.h5
+$\log_{10}M$: 68% CI: 14.6127 [-0.0323, +0.0263]
+
+Results for file: /pscratch/sd/t/titus/MiniUchuu/mcmc_results/newdata_sigboosts_fullrun_mh_no_h1z_in_bmodel_only_rs_old_prior_setup_changed_bcov_phys_units_all_scale_final_final_Fig9_mcmc_results_l6_z0.h5
+$\log_{10}M$: 68% CI: 14.7944 [-0.0324, +0.0256]
