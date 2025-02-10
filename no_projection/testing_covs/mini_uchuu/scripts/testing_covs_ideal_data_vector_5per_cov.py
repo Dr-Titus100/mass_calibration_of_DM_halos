@@ -1,4 +1,4 @@
-tmux#--------------- Packages ---------------#
+#--------------- Packages ---------------#
 import os
 import sys
 import emcee
@@ -12,12 +12,16 @@ from colossus.halo import concentration
 from colossus.cosmology import cosmology
 from scipy.stats import norm#, multivariate_normal
 
+lensing_path = os.path.expanduser("~/Titus/Lensing/mass_calibration_of_DM_halos/mini_uchuu/mini_uchuu_lensing")
+sys.path.append(lensing_path)
+
 from read_mini_uchuu import ReadMiniUchuu
 from measure_lensing_v2 import MeasureLensing
 import numdifftools as nd
 import argparse
 from schwimmbad import MPIPool 
 from sklearn.linear_model import LinearRegression
+
 
 ###################################################################
 def log_prior_individual(param, mu, sigma):
@@ -49,7 +53,7 @@ def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
     # log10_M, c = params
     log10_M, c, B0, Rs, tau, fmis, Am = params
     M = 10**log10_M #Msun/h
-
+    
     # computing miscentering corrections
     Rlam = (lam/100)**0.2 #Mpc/h comoving #cluster radius assigned by redmapper
     Rmis = tau*Rlam #Mpc/h Radial miscentering offset. Cluster centers are wrongly identified by a distance Rmis.
@@ -61,7 +65,6 @@ def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
     Rmax = 30
     nbins = 15
     Redges = np.logspace(np.log10(Rmin), np.log10(Rmax), nbins+1) #Projected radial bin edges
-    # Redges = np.logspace(np.log10(0.0323), np.log10(30.), num=15+1) #Projected radial bin edges
     Redges *= h*(1+z) #Converted to Mpc/h comoving
 
     """
@@ -132,7 +135,8 @@ def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
     scale_sel0 = (rp>=l_scale_cut)&(rp<u_scale_cut)
     scale_sel = scale_sel0[inds]
     
-    # DS cov cut
+    # # DS cov cut
+    # cov = np.genfromtxt(covpath)
     cov_cut = sac[inds]
     cov_cut = cov_cut[:,inds]
     icov0 = np.linalg.inv(cov_cut)
@@ -147,6 +151,7 @@ def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
     iBcov_cut = iBcov_cut[:,inds][:, scale_sel]
     
     #------------------Boost factor model
+    # Here, McClintock did not convert Rs to Rs*h*(1+z)
     boost_model2 = ctk.boostfactors.boost_nfw_at_R(rp, B0, Rs) #compares with data
     
     # Difference between data and model and the likelihood.
@@ -287,7 +292,7 @@ def run_mcmc(data, params, nwalkers, nsteps, burnin, sac, boost_data, z, readerf
 ## Richness-mass relation
 def evrard_extra_term(richness, mass, C, random_state):#, x_cod, y_cod, z_cod):
     all_mass = norm.rvs(mass, 0.25, random_state=random_state)#mass
-    ln_lam0 = richness #norm.rvs(richness, 0.25) #richness
+    ln_lam0 = richness #richness
     selection = np.exp(ln_lam0) >= 20
     ln_lam = ln_lam0[selection]
     ln_mass = all_mass[selection] # dependent variable Y
@@ -373,6 +378,7 @@ def getargs(lam_bin, z_bin):
     
     # redshift
     z_dic = {"0":0.3, "1":0.45, "2":0.6}
+    # z_dic = {"0":0.5*(0.2+0.35), "1":0.5*(0.35+0.5), "2":0.5*(0.5+0.65)}
     
     # Multiplicative bias due to shear and photometric redshifts
     Am_dic = {"0":1.021, "1":1.14, "2":1.16}
@@ -489,7 +495,6 @@ if __name__ == "__main__":
     print(f'Length of richness bin 4: {len(lam_bin3)}\n')
 
     # Mean mass of each bin
-    # mass_true = mass[sel]
     mean_mass_true0 = np.mean(mass[sel0])
     mean_mass_true1 = np.mean(mass[sel1])
     mean_mass_true2 = np.mean(mass[sel2])
@@ -589,8 +594,8 @@ if __name__ == "__main__":
             # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
             true_params = np.array([np.log10(mass_orig), c_orig, B0_orig, Rs_orig, 0.17, 0.25, Am_orig])  
             readerfile = filepath+f"newdata_sigboosts{sys_name}_Fig9_mcmc_results_l"+str(j+3)+"_z"+str(i)+".h5"
-        
-        # ########################################
+
+        ########################################
         if i == 0:
             tau_mu_prior, fmis_mu_prior, Am_mu_prior = 0.17, 0.25, 1.021
             tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.01, 0.01, 0.01
@@ -619,6 +624,7 @@ if __name__ == "__main__":
         lam_bin = richness[bin_sel]
         mean_lam = np.mean(lam_bin)
         print("Mean richness", mean_lam)
+        # print(len(lam_bin))
         z_lambda = redmapper["Z_LAMBDA"]
         z_lambda_bin = z_lambda[bin_sel]
         z_mean = np.mean(z_lambda_bin)
@@ -644,6 +650,7 @@ if __name__ == "__main__":
         f_dy = nd.Derivative(boost_dy)
         sigboost = np.sqrt((f_dx(B0_orig)*sigB0)**2 + (f_dy(Rs_orig)*sigRs)**2)
         boost_cov = np.diag(np.full(len(rp), 1/sigboost**2))
+        dst_cov = np.diag((ds*0.05)**2)
         
         #################################################################
         #################################################################
@@ -660,7 +667,7 @@ if __name__ == "__main__":
     
     
     # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 0.1Mpc.
-    # mpirun -np 8 python testing_covs_ideal_data_vector_m19_cov.py --redshift 0 --start 0 --end 4 --sys_name _phys_units_m19_cov_final_final2
+    # mpirun -np 8 python testing_covs_ideal_data_vector_5per_cov.py --redshift 0 --start 0 --end 4 --sys_name _phys_units_5per_cov_final_final2
     
     
     

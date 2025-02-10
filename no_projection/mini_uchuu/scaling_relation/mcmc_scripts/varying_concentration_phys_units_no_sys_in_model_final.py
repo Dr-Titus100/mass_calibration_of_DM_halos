@@ -12,6 +12,9 @@ from colossus.halo import concentration
 from colossus.cosmology import cosmology
 from scipy.stats import norm#, multivariate_normal
 
+lensing_path = os.path.expanduser("~/Titus/Lensing/mass_calibration_of_DM_halos/mini_uchuu/mini_uchuu_lensing")
+sys.path.append(lensing_path)
+
 from read_mini_uchuu import ReadMiniUchuu
 from measure_lensing_v2 import MeasureLensing
 import numdifftools as nd
@@ -19,62 +22,30 @@ import argparse
 from schwimmbad import MPIPool 
 from sklearn.linear_model import LinearRegression
 
-
 ###################################################################
-def log_prior_individual(param, mu, sigma):
-    return -0.5*((param - mu)/sigma)**2
-
-def log_gaussian_prior(theta):
-    tau, fmis, Am = theta
-    return log_prior_individual(tau, tau_mu_prior, tau_sigma_prior) + \
-           log_prior_individual(fmis, fmis_mu_prior, fmis_sigma_prior) + \
-           log_prior_individual(Am, Am_mu_prior, Am_sigma_prior)
-
 def log_flat_prior(args):
-    log10_M, c, B0, Rs = args
-    if 11.0<log10_M<18.0 and 0.0<c<20.0 and 0.0<B0<1.0 and 0.0<Rs<2.0: #change from mvir to log_mvir
+    log10_M, c = args
+    if 12.0<log10_M<16.0 and 2.0<c<10.0: #change from mvir to log_mvir
         return 0.0
     return -np.inf
 
-def log_probability(params, data, sac, boost_data, z, lam, boost_cov):
-    lp = log_flat_prior(params[:4]) + log_gaussian_prior(params[4:])
+def log_probability(params, data, cov, z):
+    lp = log_flat_prior(params)
     if not np.isfinite(lp):
         return -np.inf
-    lp2 = lp + log_likelihood(params, data, sac, boost_data, z, lam, boost_cov)[0]
+    lp2 = lp + log_likelihood(params, data, cov, z)[0]
     if np.isnan(lp2):
         return -np.inf
     else: 
         return lp2
 
-def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
-    # log10_M, c = params
-    log10_M, c, B0, Rs, tau, fmis, Am = params
-    M = 10**log10_M #Msun/h
-    
-    # computing miscentering corrections
-    Rlam = (lam/100)**0.2 #Mpc/h comoving #cluster radius assigned by redmapper
-    Rmis = tau*Rlam #Mpc/h Radial miscentering offset. Cluster centers are wrongly identified by a distance Rmis.
-    Rproj = np.logspace(-2, 2.4, num=1000, base=10) #Mpc/h Projected 2D radii. 
-    R3d = np.logspace(-2, 3, num=1000, base=10) #Mpc/h comoving. 3D radii.
-    
-    # McClintock radial bins
-    Rmin = 0.0323
-    Rmax = 30
-    nbins = 15
-    Redges = np.logspace(np.log10(Rmin), np.log10(Rmax), nbins+1) #Projected radial bin edges
-    Redges *= h*(1+z) #Converted to Mpc/h comoving
+def log_likelihood(params, data, cov, z):
+    log10_M, c = params
+    c = 6.50
+    M = (10**log10_M) #Msun/h #mass has no h, so we added the h here.
 
-    """
-    Note:
-    Minimum Rproj for Sigma(Rproj) must be >= than min(r) of xi(r).
-    Maximum Rproj for Sigma(Rproj) must be <= than max(r) of xi(r).
-    Thus, the range of values for Rproj must be 
-    equal to (or contained in) that of r
-    """
-
-    # Compute boost factors from cluster toolkit
-    #Note: Rs is default in Mpc physical
-    boost_model = ctk.boostfactors.boost_nfw_at_R(Rproj, B0, Rs*h*(1+z)) #theory
+    z = 0.3
+    a = 1/(1+z) # scale factor
     
     #Specify k and z
     # k = np.logspace(-5, 3, num=4000) #Mpc^-1 comoving
@@ -88,166 +59,65 @@ def log_likelihood(params, DS_data, sac, boost_data, z, lam, boost_cov):
     #Thus, you will need to convert these to h/Mpc and (Mpc/h)^3 to use in the toolkit.
     Plin *= h**3
     Pnonlin *= h**3
+    
+    Rproj = np.logspace(-2, 2.4, num=1000, base=10) #Mpc/h Projected 2D radii. 
+    R3d = np.logspace(-2, 3, num=1000, base=10) #Mpc/h comoving. 3D radii.
+    
+    # rp in comoving Mpc/h
+    Rmin = 0.0323 
+    Rmax = 30 
+    nbins = 15
+    
+    # rp1 = rp_
+    Redges = np.logspace(np.log10(Rmin), np.log10(Rmax), nbins+1) #Projected radial bin edges
+    Redges *= h*(1+z) #Converted to Mpc/h comoving
+
+    """
+    Note:
+    Minimum Rproj for Sigma(Rproj) must be >= than min(r) of xi(r).
+    Maximum Rproj for Sigma(Rproj) must be <= than max(r) of xi(r).
+    Thus, the range of values for Rproj must be 
+    equal to (or contained in) that of r
+    """
+    
 
     # NFW profile
     xi_nfw = ctk.xi.xi_nfw_at_r(R3d, M, c, Omega_m)
-
-    # # Matter-matter correlation function (matter auto-correlation)
+    
+    # Matter-matter correlation function (matter auto-correlation)
     xi_mm = ctk.xi.xi_mm_at_r(R3d, kh, Pnonlin)
-
-    # 2-halo correlation function
+    
+     # 2-halo correlation function
     bias_term = ctk.bias.bias_at_M(M, kh, Plin, Omega_m) # Here, P must be linear.
     xi_2halo = ctk.xi.xi_2halo(bias_term, xi_mm)
-
+    
     # Halo-matter correlation function
     xi_hm = ctk.xi.xi_hm(xi_nfw, xi_2halo)
-
+    
     # Sigma (computed from xi_hm)
     Sigma = ctk.deltasigma.Sigma_at_R(Rproj, R3d, xi_hm, M, c, Omega_m) #Sigma
-
+    
     # DeltaSigma (excess surface density)
-    DS = ctk.deltasigma.DeltaSigma_at_R(Rproj, Rproj, Sigma, M, c, Omega_m) #DeltaSigma
-
-    Sigma_mis  = ctk.miscentering.Sigma_mis_at_R(Rproj, Rproj, Sigma, M, c, Omega_m, Rmis, kernel="gamma") #miscentered Sigma profiles
-    DS_mis = ctk.miscentering.DeltaSigma_mis_at_R(Rproj, Rproj, Sigma_mis) #miscentered Sigma profiles
-
-    #full Sigma profile; i.e. miscentered + correctly centered Sigma profiles
-    full_Sigma = (1-fmis)*Sigma + fmis*Sigma_mis 
-    #full DeltaSigma profile; i.e. miscentered + correctly centered DeltaSigma profiles
-    full_DS = (1-fmis)*DS + fmis*DS_mis 
-    full_DS *= Am #multiplicative bias due to shear and photometric redshift.
-
-    full_DS /= boost_model #de-boost the model
-    Sigma_crit_inv = Sigma_crit_inv0*h*(1+z)**2
-    full_DS /= (1-full_Sigma*Sigma_crit_inv) #Reduced shear
-    #Here, DeltaSigma is in Msun h/pc^2 comoving
-
-    ave_DS = ctk.averaging.average_profile_in_bins(Redges, Rproj, full_DS)
+    # mass = mass/h
+    DS_theory = ctk.deltasigma.DeltaSigma_at_R(Rproj, Rproj, Sigma, M, c, Omega_m) #DeltaSigma
+    ave_DS = ctk.averaging.average_profile_in_bins(Redges, Rproj, DS_theory)
     ave_DS *= h*(1+z)**2 #convert to Msun/pc^2 physical
+    model = ave_DS[sel]
+        
+    scale_sel0 = (rp>=0.2)&(rp<999)
+    scale_sel = scale_sel0[sel]
+    # covariance
+    icov_cut = np.linalg.inv(cov)
     
-    # DS radii cut
-    inds = (rp >= 0.2)*(rp < 999) #rp is the radial bins for DS. It's a global variable. M19 cuts at 0.2.
-    
-    # Scale cut
-    scale_sel0 = (rp>=l_scale_cut)&(rp<u_scale_cut)
-    scale_sel = scale_sel0[inds]
-    
-    # # DS cov cut
-    # cov = np.genfromtxt(covpath)
-    cov_cut = sac[inds]
-    cov_cut = cov_cut[:,inds]
-    icov0 = np.linalg.inv(cov_cut)
-    icov_cut = icov0[scale_sel]
-    icov_cut = icov_cut[:, scale_sel]
-    DS_model = ave_DS[inds]
-    
-    Bp1 = boost_data#[threshold_cut]
-    Be1 = Be#[threshold_cut] #boost error
-    Bp1_cut = Bp1[inds]
-    iBcov_cut = boost_cov[inds][scale_sel]
-    iBcov_cut = iBcov_cut[:,inds][:, scale_sel]
-    
-    #------------------Boost factor model
-    # Here, McClintock did not convert Rs to Rs*h*(1+z)
-    boost_model2 = ctk.boostfactors.boost_nfw_at_R(rp, B0, Rs) #compares with data
+    icov_cut = icov_cut[sel][scale_sel]
+    icov_cut = icov_cut[:,sel][:, scale_sel]
     
     # Difference between data and model and the likelihood.
-    data_diff = (DS_data[inds] - DS_model)[scale_sel]
-    boost_diff = (Bp1_cut - boost_model2[inds])[scale_sel]
+    data_diff = (data - model)[scale_sel]
     data_likelihood = -0.5*np.dot(data_diff, np.dot(icov_cut, data_diff))
-    boost_likelihood = -0.5*np.dot(boost_diff, np.dot(iBcov_cut, boost_diff))
-    total_likelihood =  data_likelihood + boost_likelihood
-    return total_likelihood, ave_DS, boost_model2
+    return data_likelihood, ave_DS
 
-######################################################
-######################################################
-def data_vector(params, z, lam):
-    log10_M, c, B0, Rs, tau, fmis, Am = params
-    M = 10**log10_M #Msun/h
-
-    # computing miscentering corrections
-    Rlam = (lam/100)**0.2 #Mpc/h comoving #cluster radius assigned by redmapper
-    Rmis = tau*Rlam #Mpc/h Radial miscentering offset. Cluster centers are wrongly identified by a distance Rmis.
-    Rproj = np.logspace(-2, 2.4, num=1000, base=10) #Mpc/h Projected 2D radii. 
-    R3d = np.logspace(-2, 3, num=1000, base=10) #Mpc/h comoving. 3D radii.
-    
-    # McClintock radial bins
-    Rmin = 0.0323
-    Rmax = 30
-    nbins = 15
-    Redges = np.logspace(np.log10(Rmin), np.log10(Rmax), nbins+1) #Projected radial bin edges
-    Redges *= h*(1+z) #Converted to Mpc/h comoving
-
-    """
-    Note:
-    Minimum Rproj for Sigma(Rproj) must be >= than min(r) of xi(r).
-    Maximum Rproj for Sigma(Rproj) must be <= than max(r) of xi(r).
-    Thus, the range of values for Rproj must be 
-    equal to (or contained in) that of r
-    """
-    
-    # Compute boost factors from cluster toolkit
-    #Note: Rs is default in Mpc physical
-    boost_model = ctk.boostfactors.boost_nfw_at_R(Rproj, B0, Rs*h*(1+z)) #theory for diluting DeltaSigma
-    
-    #Specify k and z
-    # k = np.logspace(-5, 3, num=4000) #Mpc^-1 comoving
-    k = np.logspace(-5, np.log10(k_max), num=4000) #Mpc^-1 comoving
-    # Power spectrum
-    Pnonlin = np.array([cosmo_ctk.pk(ki, z) for ki in k])#*h**3  #Mpc^3/h^3 comoving
-    Plin = np.array([cosmo_ctk.pk_lin(ki, z) for ki in k])#*h**3  #Mpc^3/h^3 comoving
-    kh = k/h #h/Mpc comoving
-    # k /= h #h/Mpc comoving
-    #P(k) are in Mpc^3/h^3 comoving
-    #Thus, you will need to convert these to h/Mpc and (Mpc/h)^3 to use in the toolkit.
-    Plin *= h**3
-    Pnonlin *= h**3
-
-    # NFW profile
-    xi_nfw = ctk.xi.xi_nfw_at_r(R3d, M, c, Omega_m)
-
-    # # Matter-matter correlation function (matter auto-correlation)
-    xi_mm = ctk.xi.xi_mm_at_r(R3d, kh, Pnonlin)
-
-    # 2-halo correlation function
-    bias_term = ctk.bias.bias_at_M(M, kh, Plin, Omega_m) # Here, P must be linear.
-    xi_2halo = ctk.xi.xi_2halo(bias_term, xi_mm)
-
-    # Halo-matter correlation function
-    xi_hm = ctk.xi.xi_hm(xi_nfw, xi_2halo)
-
-    # Sigma (computed from xi_hm)
-    Sigma = ctk.deltasigma.Sigma_at_R(Rproj, R3d, xi_hm, M, c, Omega_m) #Sigma
-
-    # DeltaSigma (excess surface density)
-    DS = ctk.deltasigma.DeltaSigma_at_R(Rproj, Rproj, Sigma, M, c, Omega_m) #DeltaSigma
-
-    Sigma_mis  = ctk.miscentering.Sigma_mis_at_R(Rproj, Rproj, Sigma, M, c, Omega_m, Rmis, kernel="gamma") #miscentered Sigma profiles
-    DS_mis = ctk.miscentering.DeltaSigma_mis_at_R(Rproj, Rproj, Sigma_mis) #miscentered Sigma profiles
-
-    #full Sigma profile; i.e. miscentered + correctly centered Sigma profiles
-    full_Sigma = (1-fmis)*Sigma + fmis*Sigma_mis 
-    #full DeltaSigma profile; i.e. miscentered + correctly centered DeltaSigma profiles
-    full_DS = (1-fmis)*DS + fmis*DS_mis 
-    full_DS *= Am #multiplicative bias due to shear and photometric redshift.
-
-    full_DS /= boost_model #de-boost the model
-    Sigma_crit_inv = Sigma_crit_inv0*h*(1+z)**2
-    full_DS /= (1-full_Sigma*Sigma_crit_inv) #Reduced shear
-    #Here, DeltaSigma is in Msun h/pc^2 comoving
-
-    ave_DS = ctk.averaging.average_profile_in_bins(Redges, Rproj, full_DS)
-    ave_DS *= h*(1+z)**2 #convert to Msun/pc^2 physical
-    
-    #------------------Boost factor model
-    boost_model2 = ctk.boostfactors.boost_nfw_at_R(rp, B0, Rs) #compares with data
-    
-    return ave_DS, boost_model2
-
-
-######################################################
-######################################################
-def run_mcmc(data, params, nwalkers, nsteps, burnin, sac, boost_data, z, readerfile, lam, boost_cov): 
+def run_mcmc(data, params, nwalkers, nsteps, burnin, cov, z, readerfile): 
     init_pts = params
     ndim = len(init_pts) #number of params we want to calibrate
 
@@ -256,7 +126,7 @@ def run_mcmc(data, params, nwalkers, nsteps, burnin, sac, boost_data, z, readerf
         if not pool.is_master():
             pool.wait()
             sys.exit(0)
-        
+    
         # # Set up the backend
         if not os.path.isfile(readerfile):
             backend = emcee.backends.HDFBackend(readerfile)
@@ -267,22 +137,47 @@ def run_mcmc(data, params, nwalkers, nsteps, burnin, sac, boost_data, z, readerf
             pos = None
 
         sampler = emcee.EnsembleSampler(nwalkers, ndim, log_probability, 
-                                        args=(np.array(data), sac, boost_data, z, lam, boost_cov), 
+                                        args=(np.array(data), cov, z), 
                                         backend=backend)
         sampler.run_mcmc(pos, nsteps, progress=True);
 
     af = sampler.acceptance_fraction
     print("Mean acceptance fraction:", np.mean(af))
-    # burnin = 200
-    samples_n = sampler.flatchain#.copy()
+    return sampler
 
-    O_mcmc = map(lambda v: (v[1], v[2]-v[1], v[1]-v[0]), 
-                 zip(*np.percentile(samples_n, [16, 50, 84], 
-                                    axis=0)))
-    print('\nResults from emcee')
-    print(O_mcmc)
-    flat_samples = sampler.get_chain(discard=burnin, flat=True)
-    return sampler, flat_samples, samples_n, O_mcmc
+def add_sys_to_data(mass, DS_data0, Sigma_data0, Rs, B0, Am, z, lam, Rp_mid):
+    tau = 0.17
+    fmis = 0.25
+    # mass = 10**log10_M
+    c = concentration.concentration(M=mass, mdef='200m', z=z, model = 'bhattacharya13') # 'bhattacharya13', 'bullock01'
+    # computing miscentering corrections
+    Rlam = (lam/100)**0.2 #Mpc/h comoving
+    Rmis = tau*Rlam #Mpc/h Radial miscentering offset. Cluster centers are wrongly identified by a distance Rmis.
+    
+    # McClintock radial bins
+    Rmin = 0.0323
+    Rmax = 30
+    nbins = 15
+    Rproj = rp_
+    Redges = np.logspace(np.log10(Rmin), np.log10(Rmax), nbins+1) #Projected radial bin edges
+    Redges *= h*(1+z) #Converted to Mpc/h comoving
+
+    Sigma_mis  = ctk.miscentering.Sigma_mis_at_R(Rproj, Rproj, Sigma_data0, mass, c, Omega_m, Rmis, kernel="gamma") #miscentered Sigma profiles
+    DS_mis = ctk.miscentering.DeltaSigma_mis_at_R(Rproj, Rproj, Sigma_mis) #miscentered Sigma profiles
+
+    full_Sigma = (1-fmis)*Sigma_data0 + fmis*Sigma_mis 
+    DS_data = (1-fmis)*DS_data0 + fmis*DS_mis # miscentered (from theory) + correctly centered DeltaSigma profiles
+    DS_data *= Am # multiplicative bias
+
+    # Compute boost factors from cluster toolkit
+    boost_model = ctk.boostfactors.boost_nfw_at_R(Rproj, B0, Rs*h*(1+z)) # to correct for dilution effects
+    DS_data /= boost_model # de-boost the model
+    Sigma_crit_inv = Sigma_crit_inv0*h*(1+z)**2
+    DS_data /= (1-full_Sigma*Sigma_crit_inv) #Reduced shear
+    DS_data_final = ctk.averaging.average_profile_in_bins(Redges, Rproj, DS_data)
+    DS_data_final *= h*(1+z)**2 #convert to Msun/pc^2 physical
+    boost_model2 = ctk.boostfactors.boost_nfw_at_R(Rp_mid, B0, Rs) 
+    return DS_data_final, boost_model2#, Rp_mid
 
 ######################################################
 ######################################################
@@ -337,8 +232,8 @@ def evrard_extra_term2(richness, mass, C):#, x_cod, y_cod, z_cod):
     log_richness0 = alpha*all_mass + pi #no scatter
     
     return log_richness0, alpha, pi, C, rsquared, ln_mass#, x_cod_new, y_cod_new, z_cod_new
-################################################################
 
+################################################################
 ################################################################
 def getargs(lam_bin, z_bin):
     # Values taken from McClintock et. al., 2019.
@@ -375,7 +270,6 @@ def getargs(lam_bin, z_bin):
     
     # redshift
     z_dic = {"0":0.3, "1":0.45, "2":0.6}
-    # z_dic = {"0":0.5*(0.2+0.35), "1":0.5*(0.35+0.5), "2":0.5*(0.5+0.65)}
     
     # Multiplicative bias due to shear and photometric redshifts
     Am_dic = {"0":1.021, "1":1.14, "2":1.16}
@@ -395,11 +289,14 @@ if __name__ == "__main__":
     nbody_loc = '/global/u2/t/titus/Titus/Lensing/data/'
     lensing_loc = '/global/u2/t/titus/Titus/Lensing/data/McClintock_data/desy1_tamas/'
     filepath = '/pscratch/sd/t/titus/MiniUchuu/mcmc_results/'
-    
-    saved_ds_profiles_dic = nbody_loc+"saved_mini_uchuu_profiles_newdata_dic_mh_phys_units2.npy" #saved_mini_uchuu_profiles_newdata_dic
+            
+    saved_ds_profiles_dic = nbody_loc+"saved_mini_uchuu_profiles_newdata_dic_mh_phys_units_final22.npy" #saved_mini_uchuu_profiles_newdata_dic
+    saved_ds_profiles_dic2 = nbody_loc+"saved_mini_uchuu_profiles_no_sys_model_phys_units_final_c_6.5.npy" #saved_mini_uchuu_profiles_newdata_dic
     converted_mini_uchuu_dic = {} # a dictionary for mini Uchuu profiles after adding systematics to them
+    converted_mini_uchuu_dic2 = {} # a dictionary for mini Uchuu profiles after adding systematics to them
     saved_boost_profiles_dic = nbody_loc+"saved_boost_profiles_newdata_dic.npy"
     boost_dic = {} # boost factor profile computed from M19; to be used as input data in the MCMC
+    ########################################################
     ########################################################
     
     # Set cosmology (colossus)
@@ -426,8 +323,9 @@ if __name__ == "__main__":
     ml = MeasureLensing(nbody_loc, Rmin=-2, Rmax=2.3, pimax=100)
     ml.write_bin_file()
     
+    # compute richness
     true_mass = mass#[sel]
-   
+    
     ##############################################
     ##############################################
     # Melchior, 2017 scaling relation
@@ -548,17 +446,11 @@ if __name__ == "__main__":
     parser.add_argument('--start', type=int, default=0, help='Starting point of the loop')
     parser.add_argument('--end', type=int, default=4, help='End point of the loop')
     parser.add_argument('--sys_name', type=str, default="_sys0", help='Give file name')
-    parser.add_argument('--l_scale_cut', type=float, default=0.1, help='Lower scale cut value in floating point')
-    parser.add_argument('--u_scale_cut', type=float, default=999, help='Upper scale cut value in floating point')
-    
     args = parser.parse_args()
     i = args.redshift
     start = args.start
     end = args.end
     sys_name = args.sys_name
-    l_scale_cut = args.l_scale_cut
-    u_scale_cut = args.u_scale_cut
-    # precision = args.precision
     
     ##########################################################
     for j in range(start,end):
@@ -568,40 +460,44 @@ if __name__ == "__main__":
             high = 30
             mass_orig, c_orig, B0_orig, Rs_orig, z, Am_orig, Sigma_crit_inv0, profile_ds, Sigma_data0, sigRs, sigB0, lam_z_bin = getargs(j+3,i)
             # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
-            true_params = np.array([np.log10(mass_orig), c_orig, B0_orig, Rs_orig, 0.17, 0.25, Am_orig])  
+            c_orig = concentration.concentration(M=mass_orig, mdef='200m', z=z, model = 'bhattacharya13')
+            true_params = np.array([np.log10(mass_orig), c_orig])  
             readerfile = filepath+f"newdata_sigboosts{sys_name}_Fig9_mcmc_results_l"+str(j+3)+"_z"+str(i)+".h5"
         elif j+3 == 4:
             low = 30
             high = 45
             mass_orig, c_orig, B0_orig, Rs_orig, z, Am_orig, Sigma_crit_inv0, profile_ds, Sigma_data0, sigRs, sigB0, lam_z_bin = getargs(j+3,i)
             # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
-            true_params = np.array([np.log10(mass_orig), c_orig, B0_orig, Rs_orig, 0.17, 0.25, Am_orig])  
+            c_orig = concentration.concentration(M=mass_orig, mdef='200m', z=z, model = 'bhattacharya13')
+            true_params = np.array([np.log10(mass_orig), c_orig])  
             readerfile = filepath+f"newdata_sigboosts{sys_name}_Fig9_mcmc_results_l"+str(j+3)+"_z"+str(i)+".h5"
         elif j+3 == 5:
             low = 45
             high = 60
             mass_orig, c_orig, B0_orig, Rs_orig, z, Am_orig, Sigma_crit_inv0, profile_ds, Sigma_data0, sigRs, sigB0, lam_z_bin = getargs(j+3,i)
             # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
-            true_params = np.array([np.log10(mass_orig), c_orig, B0_orig, Rs_orig, 0.17, 0.25, Am_orig]) 
+            c_orig = concentration.concentration(M=mass_orig, mdef='200m', z=z, model = 'bhattacharya13')
+            true_params = np.array([np.log10(mass_orig), c_orig]) 
             readerfile = filepath+f"newdata_sigboosts{sys_name}_Fig9_mcmc_results_l"+str(j+3)+"_z"+str(i)+".h5"
         elif j+3 == 6:
             low = 60
             high = 2000 # Infinity
             mass_orig, c_orig, B0_orig, Rs_orig, z, Am_orig, Sigma_crit_inv0, profile_ds, Sigma_data0, sigRs, sigB0, lam_z_bin = getargs(j+3,i)
             # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
-            true_params = np.array([np.log10(mass_orig), c_orig, B0_orig, Rs_orig, 0.17, 0.25, Am_orig])  
+            c_orig = concentration.concentration(M=mass_orig, mdef='200m', z=z, model = 'bhattacharya13')
+            true_params = np.array([np.log10(mass_orig), c_orig]) 
             readerfile = filepath+f"newdata_sigboosts{sys_name}_Fig9_mcmc_results_l"+str(j+3)+"_z"+str(i)+".h5"
 
         ########################################
         if i == 0:
             tau_mu_prior, fmis_mu_prior, Am_mu_prior = 0.17, 0.25, 1.021
-            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.01, 0.01, 0.01
+            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.04, 0.08, 0.025
         elif i == 1:
             tau_mu_prior, fmis_mu_prior, Am_mu_prior = 0.17, 0.25, 1.014
-            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.01, 0.01, 0.01
+            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.04, 0.08, 0.024
         elif i == 2:
             tau_mu_prior, fmis_mu_prior, Am_mu_prior = 0.17, 0.25, 1.016
-            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.01, 0.01, 0.01
+            tau_sigma_prior, fmis_sigma_prior, Am_sigma_prior = 0.04, 0.08, 0.025
         ########################################
         
         # Data from McClintock et. al., 2019.
@@ -612,7 +508,7 @@ if __name__ == "__main__":
         dst_cov = np.loadtxt(lensing_loc+"full-unblind-v2-mcal-zmix_y1subtr_l"+str(j+3)+"_z"+str(i)+"_dst_cov.dat")
         boost_data99 = np.loadtxt(lensing_loc+"full-unblind-v2-mcal-zmix_y1clust_l"+str(j+3)+"_z"+str(i)+"_zpdf_boost.dat")[:,1] #Boost factor data
         Be = np.loadtxt(lensing_loc+"full-unblind-v2-mcal-zmix_y1clust_l"+str(j+3)+"_z"+str(i)+"_zpdf_boost.dat")[:,2] #boost error
-        boost_cov99 = np.loadtxt(lensing_loc+"full-unblind-v2-mcal-zmix_y1clust_l"+str(j+3)+"_z"+str(i)+"_zpdf_boost_cov.dat")    
+        boost_cov99 = np.loadtxt(lensing_loc+"full-unblind-v2-mcal-zmix_y1clust_l"+str(j+3)+"_z"+str(i)+"_zpdf_boost_cov.dat")     
 
         # Richness
         redmapper = fitsio.read(nbody_loc+"redmapper_y1a1_public_v6.4_catalog.fits")
@@ -621,51 +517,30 @@ if __name__ == "__main__":
         lam_bin = richness[bin_sel]
         mean_lam = np.mean(lam_bin)
         print("Mean richness", mean_lam)
-        # print(len(lam_bin))
         z_lambda = redmapper["Z_LAMBDA"]
         z_lambda_bin = z_lambda[bin_sel]
         z_mean = np.mean(z_lambda_bin)
         
-        rp = np.array([ 0.04221139,  0.06651455,  0.10516441,  0.16537565,  0.26069825,
-                       0.41202975,  0.65045543,  1.02563815,  1.61857299,  2.55379112, 
-                       4.02731114,  6.34991963, 10.00980414, 15.784786  , 24.87216972])
-        ds, boost_data = data_vector(params = true_params, z = z, lam = mean_lam)
-        # converted_mini_uchuu_dic[lam_z_bin] = ds
-        # boost_dic[lam_z_bin] = boost_data
+        ##################################################################
+        ##################################################################
+        ### Creating and saving 
 
-        # print("ds", ds)
-        # print("shape", ds.shape)
+        rp = np.array([0.04221139,  0.06651455,  0.10516441,  0.16537565,  0.26069825,
+                       0.41202975,  0.65045543,  1.02563815,  1.61857299,  2.55379112, 
+                       4.02731114,  6.34991963, 10.00980414, 15.784786, 24.87216972])
+        ds0, boost_data = add_sys_to_data(mass_orig, profile_ds, Sigma_data0, Rs_orig, B0_orig, Am_orig, z, mean_lam, rp)
+        sel = rp > 0.2
+        ds = ds0[sel]
         
+        ds_model = log_likelihood(true_params, ds, dst_cov, z)[1]
+        
+        converted_mini_uchuu_dic[lam_z_bin] = ds0
+        converted_mini_uchuu_dic2[lam_z_bin] = ds_model
+        # boost_dic[lam_z_bin] = boost_data
     # np.save(saved_ds_profiles_dic, converted_mini_uchuu_dic)
+    np.save(saved_ds_profiles_dic2, converted_mini_uchuu_dic2)
     # np.save(saved_boost_profiles_dic, boost_dic)
         
-        #------------------Boost factor covariance
-        boost_dx = lambda x: ctk.boostfactors.boost_nfw_at_R(rp, x, Rs_orig) # Rs in physical units
-        boost_dy = lambda y: ctk.boostfactors.boost_nfw_at_R(rp, B0_orig, y) # Rs in physical units
-
-        f_dx = nd.Derivative(boost_dx)
-        f_dy = nd.Derivative(boost_dy)
-        sigboost = np.sqrt((f_dx(B0_orig)*sigB0)**2 + (f_dy(Rs_orig)*sigRs)**2)
-        boost_cov = np.diag(np.full(len(rp), 1/sigboost**2))
-        dst_cov = np.diag((ds*0.05)**2)
-        
-        #################################################################
-        #################################################################
-        # Initial guess for the MCMC
-        start_params = np.array([14.20, 4.20, 0.3, 0.7, 0.18, 0.23, 1.0]) # mass, concentration, B0, Rs, tau (miscentering offset), fmis, Am.
-        nsteps = 10000
-        burnin = int(0.1*nsteps)
-        sampler, flat_samples, samples_n, O_mcmc = run_mcmc(data = ds, params = start_params, 
-                                                            nwalkers = 32, nsteps = nsteps, burnin = burnin, 
-                                                            sac = dst_cov, boost_data = boost_data, z=z, 
-                                                            readerfile = readerfile, lam = mean_lam, 
-                                                            boost_cov = boost_cov)
-        # print("Done!!!")
-    
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 0.1Mpc.
-    # mpirun -np 8 python testing_covs_ideal_data_vector_5per_cov.py --redshift 0 --start 0 --end 4 --sys_name _phys_units_5per_cov_final_final2
-    
-    
+       
     
     

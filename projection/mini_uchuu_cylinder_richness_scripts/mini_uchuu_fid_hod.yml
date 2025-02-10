@@ -1,0 +1,39 @@
+model_name: fid_hod_z0.3
+
+nbody: mini_uchuu
+nbody_loc: /bsuhome/hwu/scratch/uchuu/MiniUchuu/
+# output_loc: /bsuscratch/tnde/MiniUchuu_mock_d30_no_pecvel_final_changing_vol_heidi_new
+output_loc: /bsuscratch/tnde/MiniUchuu_mock_d30_no_pecvel_final_changing_vol_heidi_final9
+redshift: 0.3
+
+# f_cen: 0.7791827939021909
+# logM0: 6.308438111328068
+# alpha: 0.8876387336893103
+# logM1: 12.877618663465556
+# lgkappa: 0
+# logMmin: 12.785477890158617
+# sigma_logM: 0.16710463990534832
+# sigma_intr: 1.4543509220249935
+
+# richness
+depth: 30
+perc: True
+use_rlambda: True
+save_members: True
+
+# Cosmology
+# http://skiesanduniverses.org/Simulations/Uchuu/
+OmegaM: 0.3089
+OmegaL: 0.6911
+hubble: 0.6774
+sigma8: 0.8159
+OmegaB: 0.0486
+ns: 0.9667
+boxsize: 400
+mpart: 3.270422e8
+
+mdef: 200m
+
+pec_vel: False
+
+sat_from_part: False
