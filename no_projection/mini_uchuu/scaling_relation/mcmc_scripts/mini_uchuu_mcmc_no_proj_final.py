@@ -12,6 +12,9 @@ from colossus.halo import concentration
 from colossus.cosmology import cosmology
 from scipy.stats import norm#, multivariate_normal
 
+lensing_path = os.path.expanduser("~/Titus/Lensing/mass_calibration_of_DM_halos/mini_uchuu/mini_uchuu_lensing")
+sys.path.append(lensing_path)
+
 from read_mini_uchuu import ReadMiniUchuu
 from measure_lensing_v2 import MeasureLensing
 import numdifftools as nd
