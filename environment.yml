@@ -1,0 +1,37 @@
+# conda env create -f environment.yml
+# mamba env create -f environment.yml
+name: mass_cal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - arviz==0.15.1
+  - astropy==5.3.3
+  - ChainConsumer==0.34.0
+  - classy==3.2.5.0
+  - cluster-toolkit==0.0.0
+  - colossus==1.3.1
+  - corner==2.2.2
+  - Corrfunc==2.5.3
+  - dark-emulator==1.0.23
+  - emcee==3.1.4
+  - findiff==0.10.0
+  - fitsio==1.2.1
+  - GetDist==1.4.3
+  - h5py==3.8.0
+  - joblib==1.2.0
+  - matplotlib==3.7.0
+  - mpi4py
+  - numdifftools==0.9.41
+  - numpy==2.2.2
+  - pandas==1.5.3
+  - schwimmbad==0.3.2
+  - scikit-learn==1.2.2
+  - scipy==1.10.1
+  - seaborn==0.12.2
+  - pip:
+      # If you need any pip-only packages, add them here.
+      # Example: 
+      - pylas
+
