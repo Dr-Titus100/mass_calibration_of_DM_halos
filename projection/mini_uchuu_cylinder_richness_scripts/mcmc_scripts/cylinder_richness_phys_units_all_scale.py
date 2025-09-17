@@ -38,7 +38,6 @@ def log_probability(params, data, cov, z):
     else: 
         return lp2
 
-    
 def log_likelihood(params, data, cov, z):
     log10_M, c = params
     M = (10**log10_M) #Msun/h #mass has no h, so we added the h here.
@@ -275,7 +274,4 @@ if __name__ == "__main__":
                            nwalkers = 32, nsteps = nsteps, burnin = burnin, 
                            cov = dst_cov, z=z, readerfile = readerfile)
     
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, not radial cut.
-    # mpirun -np 8 python cylinder_richness_phys_units_all_scale.py --redshift 0 --start 0 --end 4 --sys_name _mini_uchuu_cylinder_richness_all_scale_depth30_final_final --depth 30
-    
-       
+      

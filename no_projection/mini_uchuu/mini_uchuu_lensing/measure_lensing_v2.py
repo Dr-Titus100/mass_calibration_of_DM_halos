@@ -13,7 +13,7 @@ class MeasureLensing(object):
 
         # n_decade = (np.log10(Rmax)-np.log10(Rmin))
         # nrp_per_decade = 5
-        # self.n_rp = int(nrp_per_decade*n_decade + 1.001) + 1 ## adding the inner most bin # (Titus) Also, I added +1 to self.n_rp to much McClintock radial bins
+        # self.n_rp = int(nrp_per_decade*n_decade + 1.001) + 1 # # adding the inner most bin # (Titus) Also, I added +1 to self.n_rp to much McClintock radial bins
         self.n_rp = len(np.logspace(self.Rmin, self.Rmax, num=1001, base=10))
         self.binfile = self.out_loc+'rp_bins.dat'
 

@@ -421,14 +421,4 @@ if __name__ == "__main__":
                                                             boost_cov = boost_cov)
     
 
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 0.3Mpc to 3Mpc.
-    # mpirun -np 8 python mini_uchuu_cylinder_richness_mcmc.py --redshift 0 --start 0 --end 4 --l_scale_cut 0.3 --u_scale_cut 3.0 --sys_name _cylinder_richness_phys_units_with_sys_small_scale_0.3_3_depth30 --depth 30
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 3Mpc to 30Mpc.
-    # mpirun -np 8 python mini_uchuu_cylinder_richness_mcmc.py --redshift 0 --start 0 --end 4 --l_scale_cut 3.0 --u_scale_cut 30.0 --sys_name _cylinder_richness_phys_units_with_sys_large_scale_3_30_depth30 --depth 30
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, not radial cut.
-    # mpirun -np 8 python mini_uchuu_cylinder_richness_mcmc.py --redshift 0 --start 0 --end 4 --sys_name _cylinder_richness_phys_units_with_sys_all_scale_depth30 --depth 30
-    
-    ## next remove h1z from Redges
     

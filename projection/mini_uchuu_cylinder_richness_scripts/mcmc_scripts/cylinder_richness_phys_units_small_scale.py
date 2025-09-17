@@ -276,9 +276,4 @@ if __name__ == "__main__":
                            cov = dst_cov, z=z, readerfile = readerfile)
 
     
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, not radial cut.
-    # mpirun -np 8 python cylinder_richness_phys_units_small_scale.py --redshift 0 --start 0 --end 4 --sys_name _mini_uchuu_cylinder_richness_small_scale_depth30_final02 --depth 30
     
-    # mpirun -np 8 python cylinder_richness_phys_units_small_scale.py --redshift 0 --start 0 --end 4 --sys_name _mini_uchuu_cylinder_richness_small_scale_depth30_final_final --depth 30
-   
-   
