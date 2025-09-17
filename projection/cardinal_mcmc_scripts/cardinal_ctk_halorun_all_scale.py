@@ -76,24 +76,24 @@ def log_likelihood(params, data, cov, z):
     Pnonlin *= h**3
 
     # NFW profile
-    xi_nfw = ctk.xi.xi_nfw_at_r(R3d, M, c, Omega_m, delta=200) #delta=200 by default
+    xi_nfw = ctk.xi.xi_nfw_at_r(R3d, M, c, Omega_m)
 
     # # Matter-matter correlation function (matter auto-correlation)
     xi_mm = ctk.xi.xi_mm_at_r(R3d, kh, Pnonlin)
 
     # 2-halo correlation function
-    bias_term = ctk.bias.bias_at_M(M, kh, Plin, Omega_m, delta=200) # Here, P must be linear. #delta=200 by default
+    bias_term = ctk.bias.bias_at_M(M, kh, Plin, Omega_m) # Here, P must be linear. 
     xi_2halo = ctk.xi.xi_2halo(bias_term, xi_mm)
 
     # Halo-matter correlation function
     xi_hm = ctk.xi.xi_hm(xi_nfw, xi_2halo)
 
     # Sigma (computed from xi_hm)
-    Sigma = ctk.deltasigma.Sigma_at_R(Rproj, R3d, xi_hm, M, c, Omega_m, delta=200) #delta=200 by default
-    # Sigma = ctk.deltasigma.Sigma_nfw_at_R(Rproj, M, c, Omega_m, delta=200)
+    Sigma = ctk.deltasigma.Sigma_at_R(Rproj, R3d, xi_hm, M, c, Omega_m) 
+    # Sigma = ctk.deltasigma.Sigma_nfw_at_R(Rproj, M, c, Omega_m)
 
     # DeltaSigma (excess surface density)
-    DS = ctk.deltasigma.DeltaSigma_at_R(Rproj, Rproj, Sigma, M, c, Omega_m, delta=200) #delta=200 by default
+    DS = ctk.deltasigma.DeltaSigma_at_R(Rproj, Rproj, Sigma, M, c, Omega_m) 
     ave_DS = ctk.averaging.average_profile_in_bins(Redges, Rproj, DS)
     
     model = ave_DS[sel]*h*(1+z)**2 #convert to Msun/pc^2 physical
@@ -228,6 +228,5 @@ if __name__ == "__main__":
         sampler = run_mcmc(data = ds, params = args, nwalkers = 32, nsteps = 10000, 
                            burnin = 1000, cov = cov, z = z, readerfile = readerfile)
 
-# mpirun -np 8 python cardinal_ctk_halorun_all_scale.py --run_name _fullrun_ctk_halorun_all_scale_final_final
 
 

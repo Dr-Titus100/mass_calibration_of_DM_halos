@@ -42,7 +42,6 @@ class MeasureLensing(object):
         # X1=np.float64(xh), Y1=np.float64(yh), Z1=np.float64(zh), 
         # X2=np.float64(xp), Y2=np.float64(yp), Z2=np.float64(zp), 
 
-
         results_DD = np.array(results_DD)
         # rmin, rmax, rpavg, pi_upper, npairs, weight_avg
         #rp_min_2d = results_DD[:,0].reshape([n_rp, n_pi])

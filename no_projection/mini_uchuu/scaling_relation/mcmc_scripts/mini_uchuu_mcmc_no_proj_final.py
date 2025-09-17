@@ -12,7 +12,7 @@ from colossus.halo import concentration
 from colossus.cosmology import cosmology
 from scipy.stats import norm#, multivariate_normal
 
-lensing_path = os.path.expanduser("~/Titus/Lensing/mass_calibration_of_DM_halos/mini_uchuu/mini_uchuu_lensing")
+lensing_path = os.path.expanduser("~/Titus/Lensing/wl_mass_calibration/mini_uchuu/mini_uchuu_lensing")
 sys.path.append(lensing_path)
 
 from read_mini_uchuu import ReadMiniUchuu
@@ -646,16 +646,5 @@ if __name__ == "__main__":
                                                             readerfile = readerfile, lam = mean_lam, 
                                                             boost_cov = boost_cov)
     
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 0.1Mpc.
-    # mpirun -np 8 python mini_uchuu_mcmc_no_proj_final.py --redshift 0 --start 0 --end 4 --sys_name _phys_units_all_scale_final_final
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 0.3Mpc to 3Mpc.
-    # mpirun -np 8 python mini_uchuu_mcmc_no_proj_final.py --redshift 0 --start 0 --end 4 --l_scale_cut 0.2 --u_scale_cut 3.0 --sys_name _phys_units_small_scale_0.2_3_final_final
-    
-    # Added the factor of h*(1+z) to all Rs in boost data, boost cov, Redges, except boost model, radial cut at 3Mpc to 30Mpc.
-    # mpirun -np 8 python mini_uchuu_mcmc_no_proj_final.py --redshift 0 --start 0 --end 4 --l_scale_cut 3.0 --u_scale_cut 999.0 --sys_name _phys_units_large_scale_3_30_final_final
-    
-    ## next remove h1z from Redges
     
     
